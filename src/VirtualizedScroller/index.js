@@ -1,6 +1,7 @@
 import React, {useEffect, useState, useRef} from 'react';
 import {makeStyles} from '@material-ui/core';
 import PropTypes, { elementType } from 'prop-types';
+import _ from 'lodash';
 
 VirtualizedScroller.propTypes ={
     items: PropTypes.array.isRequired,
@@ -38,9 +39,6 @@ function calcLayout(visibleRect, numOfItems, itemHeightCache, windowHeight) {
     let containerPaddingTop = 0;
     let containerPaddingBottom = 0;
 
-    // console.log('======================')
-    // console.info('🤡 visibleRect: ', `y: ${visibleRect.y}, maxY: ${visibleRect.y + visibleRect.height} `);
-
     let curY = 0
 
     for (let i = 0; i < numOfItems; i++) {
@@ -48,15 +46,11 @@ function calcLayout(visibleRect, numOfItems, itemHeightCache, windowHeight) {
 
         const ithCellY = curY;
         const ithCellMaxY = ithCellY + cellHeight;
-
-        // console.info('🤢', ithCellYPos);
-        // console.info('🦊', ithCellMaxY);
         
         if (
             ithCellY <= (visibleRectMaxY + invisibleRenderingHeight)
             && ithCellMaxY >= (visibleRectY - invisibleRenderingHeight)
         ) {
-            // console.log(`${i}) height: ${cellHeight}`);
             visibleCellIndices.push(i);
         } else if (visibleCellIndices.length === 0) {
             containerPaddingTop += cellHeight;
@@ -73,35 +67,43 @@ function calcLayout(visibleRect, numOfItems, itemHeightCache, windowHeight) {
 export default function VirtualizedScroller(props) {
     const classes = useStyles(props);
     const {items, itemComponent} = props;
-    // const [itemHeightArr, setItemHeightArr] = useState(new Array(props.items.length));
     const [scrollState, setScrollState] = useState(null);
 
     const containerRef = useRef(null);
     const containerTopMargin = useRef(null);
-    const itemRefs = useRef(new Array(props.items.length));
     const itemHeightCache = useRef(new Array(props.items.length));
 
-    // const contentHeight = props.items.length * 51;
     const ItemComponent = itemComponent;
 
     useEffect(() => {
-        const eventListener1 = window.addEventListener('scroll', () => {
-            setScrollState({
-                windowHeight: window.innerHeight,
-                windowScrollY: window.scrollY,
-                containerScrollHeight: containerRef.current.scrollHeight,
-                containerOffsetTop: containerRef.current.getBoundingClientRect().top,
-            });
-        })
+        const scrollEventHandler = () => {
+            const windowHeight = window.innerHeight;
+            const windowWidth = window.innerWidth;
+            const windowScrollY = window.scrollY;
+            const containerScrollWidth = containerRef.current.scrollWidth;
+            const containerScrollHeight = containerRef.current.scrollHeight;
+            const containerOffsetTop = containerRef.current.getBoundingClientRect().top;
 
+            setScrollState({
+                windowHeight,
+                windowWidth,
+                windowScrollY,
+                containerScrollWidth,
+                containerScrollHeight,
+                containerOffsetTop,
+            });
+        };
+
+        window.addEventListener('scroll', scrollEventHandler);
+        
         return () => {
-            window.removeEventListener('scroll', eventListener1);
+            window.removeEventListener('scroll', scrollEventHandler);
         }
     }, []);
-    
+
     const visibleRect = new Rect(
         0, 
-        (scrollState && scrollState.windowScrollY) || 0,
+        scrollState === null ? 0 : scrollState.windowScrollY,
         window.innerWidth,
         window.innerHeight
     );
@@ -116,8 +118,6 @@ export default function VirtualizedScroller(props) {
         itemHeightCache.current, 
         scrollState === null ? null : scrollState.windowHeight
     );
-    
-    console.log(visibleCellIndices);
 
     return (
         <div 
@@ -131,11 +131,20 @@ export default function VirtualizedScroller(props) {
                 containerRef.current = ref;
                 containerTopMargin.current = topMargin;
 
+                const windowHeight = window.innerHeight;
+                const windowWidth = window.innerWidth;
+                const windowScrollY = window.scrollY;
+                const containerScrollWidth = containerRef.current.scrollWidth;
+                const containerScrollHeight = containerRef.current.scrollHeight;
+                const containerOffsetTop = containerRef.current.getBoundingClientRect().top;
+
                 setScrollState({
-                    windowHeight: window.innerHeight,
-                    windowScrollY: window.scrollY,
-                    containerScrollHeight: ref.scrollHeight,
-                    containerOffsetTop: topMargin,
+                    windowHeight,
+                    windowWidth,
+                    windowScrollY,
+                    containerScrollWidth,
+                    containerScrollHeight,
+                    containerOffsetTop,
                 });
             }}
             className={classes.container}
@@ -146,6 +155,13 @@ export default function VirtualizedScroller(props) {
         >
             {items.map((item, i) => {
                 if (visibleCellIndices.includes(i) === true) {
+
+                    const curItemId = item.id;
+
+                    if (items.filter(e => e.id === curItemId).length > 1) {
+                        console.log('\n\n=========================== multiple posts with same ID!!! ===========================\n\n');
+                    }
+
                     return (
                         <ItemComponent 
                             ref={(ref) => {
@@ -153,10 +169,9 @@ export default function VirtualizedScroller(props) {
                                     return;
                                 }
                                 
-                                itemRefs.current[i] = ref;
                                 itemHeightCache.current[i] = ref.clientHeight;
                             }}
-                            key={i}
+                            key={item.id}
                             descriptor={item}
                         />
                     );
