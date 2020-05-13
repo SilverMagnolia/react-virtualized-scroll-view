@@ -26,24 +26,45 @@ function Rect(x, y, width, height) {
     this.height = height;
 }
 
-function calcLayout(visibleRect, numOfItems, itemHeight) {
+const ESTIMATED_CELL_HEIGHT = 100;
+
+function calcLayout(visibleRect, numOfItems, itemHeightCache, windowHeight) {
+    const visibleRectY = visibleRect.y;
+    const visibleRectMaxY = visibleRect.y + visibleRect.height;
+    const invisibleRenderingHeight = windowHeight === null ? 300 : windowHeight / 2;
+
     const visibleCellIndices = [];
+    
     let containerPaddingTop = 0;
     let containerPaddingBottom = 0;
 
-    for (let i = 0; i < numOfItems; i++) {
-        const ithCellYPos = i * itemHeight;
+    // console.log('======================')
+    // console.info('🤡 visibleRect: ', `y: ${visibleRect.y}, maxY: ${visibleRect.y + visibleRect.height} `);
 
+    let curY = 0
+
+    for (let i = 0; i < numOfItems; i++) {
+        const cellHeight = itemHeightCache[i] || ESTIMATED_CELL_HEIGHT;
+
+        const ithCellY = curY;
+        const ithCellMaxY = ithCellY + cellHeight;
+
+        // console.info('🤢', ithCellYPos);
+        // console.info('🦊', ithCellMaxY);
+        
         if (
-            ithCellYPos <= (visibleRect.y + visibleRect.height)
-            && (ithCellYPos + itemHeight) >= visibleRect.y    
+            ithCellY <= (visibleRectMaxY + invisibleRenderingHeight)
+            && ithCellMaxY >= (visibleRectY - invisibleRenderingHeight)
         ) {
+            // console.log(`${i}) height: ${cellHeight}`);
             visibleCellIndices.push(i);
         } else if (visibleCellIndices.length === 0) {
-            containerPaddingTop += itemHeight;
+            containerPaddingTop += cellHeight;
         } else {
-            containerPaddingBottom += itemHeight;
+            containerPaddingBottom += cellHeight;
         }
+
+        curY += cellHeight;
     }
 
     return {visibleCellIndices, containerPaddingTop, containerPaddingBottom};
@@ -52,13 +73,15 @@ function calcLayout(visibleRect, numOfItems, itemHeight) {
 export default function VirtualizedScroller(props) {
     const classes = useStyles(props);
     const {items, itemComponent} = props;
+    // const [itemHeightArr, setItemHeightArr] = useState(new Array(props.items.length));
     const [scrollState, setScrollState] = useState(null);
 
     const containerRef = useRef(null);
     const containerTopMargin = useRef(null);
     const itemRefs = useRef(new Array(props.items.length));
+    const itemHeightCache = useRef(new Array(props.items.length));
 
-    const contentHeight = props.items.length * 51;
+    // const contentHeight = props.items.length * 51;
     const ItemComponent = itemComponent;
 
     useEffect(() => {
@@ -87,8 +110,15 @@ export default function VirtualizedScroller(props) {
         visibleCellIndices, 
         containerPaddingTop, 
         containerPaddingBottom
-    } = calcLayout(visibleRect, props.items.length, 51);
+    } = calcLayout(
+        visibleRect, 
+        props.items.length, 
+        itemHeightCache.current, 
+        scrollState === null ? null : scrollState.windowHeight
+    );
     
+    console.log(visibleCellIndices);
+
     return (
         <div 
             ref={(ref) => {
@@ -112,14 +142,20 @@ export default function VirtualizedScroller(props) {
             style={{
                 paddingTop: containerPaddingTop,
                 paddingBottom: containerPaddingBottom,
-                // height: contentHeight
             }}
         >
             {items.map((item, i) => {
                 if (visibleCellIndices.includes(i) === true) {
                     return (
                         <ItemComponent 
-                            ref={(ref) => itemRefs.current[i] = ref}
+                            ref={(ref) => {
+                                if (ref === null) {
+                                    return;
+                                }
+                                
+                                itemRefs.current[i] = ref;
+                                itemHeightCache.current[i] = ref.clientHeight;
+                            }}
                             key={i}
                             descriptor={item}
                         />
