@@ -29,7 +29,7 @@ function Rect(x, y, width, height) {
 
 const ESTIMATED_CELL_HEIGHT = 100;
 
-function calcLayout(visibleRect, numOfItems, itemHeightCache, windowHeight) {
+function calcLayout(visibleRect, numOfItems, itemRectCache, windowHeight) {
     const visibleRectY = visibleRect.y;
     const visibleRectMaxY = visibleRect.y + visibleRect.height;
     const invisibleRenderingHeight = windowHeight === null ? 300 : windowHeight / 2;
@@ -42,7 +42,9 @@ function calcLayout(visibleRect, numOfItems, itemHeightCache, windowHeight) {
     let curY = 0
 
     for (let i = 0; i < numOfItems; i++) {
-        const cellHeight = itemHeightCache[i] || ESTIMATED_CELL_HEIGHT;
+        const cellHeight = (itemRectCache[i] === undefined || itemRectCache[i] === null) 
+            ? ESTIMATED_CELL_HEIGHT 
+            : itemRectCache[i].height;
 
         const ithCellY = curY;
         const ithCellMaxY = ithCellY + cellHeight;
@@ -61,124 +63,213 @@ function calcLayout(visibleRect, numOfItems, itemHeightCache, windowHeight) {
         curY += cellHeight;
     }
 
+    // const itemRectsAboveLastVisibleItem = itemRectCache.slice(0, visibleCellIndices[visibleCellIndices.length - 1] + 1);
+
+    // const sumOfDirtyHeightOnTopItems = itemRectsAboveLastVisibleItem
+    //     .filter(i => i.dirtyHeight !== null)
+    //     .map(i => i.dirtyHeight)
+    //     .reduce((total, n) => n + total, 0);
+    
+    // console.info('🦊', sumOfDirtyHeightOnTopItems);
+    // containerPaddingBottom -= sumOfDirtyHeightOnTopItems;
+
     return {visibleCellIndices, containerPaddingTop, containerPaddingBottom};
+}
+
+function getComponentRect(componentRef) {
+    const clientRect = componentRef.getBoundingClientRect();
+
+    const x = clientRect.x;
+    const y = clientRect.y;
+    const width = componentRef.clientWidth;
+    const height = componentRef.clientHeight;
+
+    return new Rect(x, y, width, height);
+}
+
+// function RestorationInfo(itemRects, visibleIndices) {
+//     this.itemRects = itemRects;
+//     this.visibleIndices = visibleIndices;
+// }
+
+function Projection(visibleItemIndices, beforePadder, afterPadder) {
+    this.visibleItemIndices = visibleItemIndices;
+    this.beforePadder = beforePadder;
+    this.afterPadder = afterPadder;
 }
 
 export default function VirtualizedScroller(props) {
     const classes = useStyles(props);
     const {items, itemComponent} = props;
+
     const [scrollState, setScrollState] = useState(null);
+    const [projection, setProjection] = useState(null);
 
     const containerRef = useRef(null);
     const containerTopMargin = useRef(null);
-    const itemHeightCache = useRef(new Array(props.items.length));
+    const itemRectCache = useRef([]);
+    
+    const isResizing = useRef(false);
+
+    // const curVisibleCellIndices = useRef(null);
+    // const itemHeightCache = useRef(new Array(props.items.length));
 
     const ItemComponent = itemComponent;
 
     useEffect(() => {
         const scrollEventHandler = () => {
-            const windowHeight = window.innerHeight;
-            const windowWidth = window.innerWidth;
-            const windowScrollY = window.scrollY;
-            const containerScrollWidth = containerRef.current.scrollWidth;
-            const containerScrollHeight = containerRef.current.scrollHeight;
-            const containerOffsetTop = containerRef.current.getBoundingClientRect().top;
-
-            setScrollState({
-                windowHeight,
-                windowWidth,
-                windowScrollY,
-                containerScrollWidth,
-                containerScrollHeight,
-                containerOffsetTop,
-            });
+            if (isResizing.current === true) {
+                return;
+            }
+            // console.log('scroll')
+            handleScrollEvent();
         };
 
         window.addEventListener('scroll', scrollEventHandler);
-        
-        return () => {
-            window.removeEventListener('scroll', scrollEventHandler);
-        }
+        return () => window.removeEventListener('scroll', scrollEventHandler);
     }, []);
 
-    const visibleRect = new Rect(
-        0, 
-        scrollState === null ? 0 : scrollState.windowScrollY,
-        window.innerWidth,
-        window.innerHeight
-    );
+    useEffect(() => {
+        let timer = null;
+        const resizeEventHandler = () => {
+            if (timer !== null) {
+                clearTimeout(timer);
+            }
 
-    const {
-        visibleCellIndices, 
-        containerPaddingTop, 
-        containerPaddingBottom
-    } = calcLayout(
-        visibleRect, 
-        props.items.length, 
-        itemHeightCache.current, 
-        scrollState === null ? null : scrollState.windowHeight
-    );
+            isResizing.current = true;
+            // console.log('resize')
+
+            timer = setTimeout(() => {
+                // console.log('🦊 end resizing')
+                isResizing.current = false;
+                handleScrollEvent();
+            }, 300);
+        }
+
+        window.addEventListener('resize', resizeEventHandler);
+        return () => window.removeEventListener('resize', resizeEventHandler);
+    }, []);
+
+    function handleScrollEvent() {
+        const windowHeight = window.innerHeight;
+        const windowWidth = window.innerWidth;
+        const windowScrollY = window.scrollY;
+        const containerScrollWidth = containerRef.current.scrollWidth;
+        const containerScrollHeight = containerRef.current.scrollHeight;
+        const containerOffsetTop = containerRef.current.getBoundingClientRect().top;
+
+        setScrollState({
+            windowHeight,
+            windowWidth,
+            windowScrollY,
+            containerScrollWidth,
+            containerScrollHeight,
+            containerOffsetTop,
+        });
+    }
+
+    // const visibleRect = new Rect(
+    //     0, 
+    //     scrollState === null ? 0 : scrollState.windowScrollY,
+    //     window.innerWidth,
+    //     window.innerHeight
+    // );
+
+    // const {
+    //     visibleCellIndices, 
+    //     containerPaddingTop, 
+    //     containerPaddingBottom
+    // } = calcLayout(
+    //     visibleRect, 
+    //     props.items.length, 
+    //     itemRectCache.current, 
+    //     scrollState === null ? null : scrollState.windowHeight
+    // );
+    
+    console.info('😈 render - item rect cache: ', [...itemRectCache.current]);
+    
+    function renderItem(itemDescriptor, i) {
+        return (
+            <ItemComponent 
+                ref={(ref) => {
+                    if (ref === null) {
+                        return;
+                    }
+                    // console.log(`🦊get ref: ${i}`);
+                    const curItemRect = getComponentRect(ref);
+                    const prevItemRect = itemRectCache.current[i];
+
+                    itemRectCache.current[i] = curItemRect;
+
+                    if (
+                        prevItemRect !== undefined && prevItemRect !== null 
+                        && prevItemRect.height !== curItemRect.height
+                        && Math.abs(curItemRect.height - prevItemRect.height) > 10
+                    ) {
+                        // 불일치
+                        // console.log(`🤡 ${i}) found inconsistency: ${curItemRect.height - prevItemRect.height}`);
+                        // handleScrollEvent();
+                        // document.getElementById('virtualized-scroller-root').style.transform = `translateY(${-(curItemRect.height - prevItemRect.height)}px)`;
+                        // document.getElementById('virtualized-scroller-content').style.paddingTop += (curItemRect.height - prevItemRect.height);
+                    } else {
+                        // document.getElementById('virtualized-scroller-root').style.transform = null;
+                    }
+
+                    console.info(`${i}th item loaded: ` , [...itemRectCache.current]);
+
+                    // if (i === visibleCellIndices[visibleCellIndices.length - 1]) {
+                    //     // check inconsistency. how?
+                    //     // 
+                    //     console.log('🍀 finished rendering items!!!!')
+                    // }
+                }}
+                key={itemDescriptor.id}
+                descriptor={itemDescriptor}
+            />
+        )
+    }
 
     return (
         <div 
-            ref={(ref) => {
-                if (containerRef.current !== null) {
-                    return;
-                }
-                
-                const topMargin = ref.getBoundingClientRect().top;
-
-                containerRef.current = ref;
-                containerTopMargin.current = topMargin;
-
-                const windowHeight = window.innerHeight;
-                const windowWidth = window.innerWidth;
-                const windowScrollY = window.scrollY;
-                const containerScrollWidth = containerRef.current.scrollWidth;
-                const containerScrollHeight = containerRef.current.scrollHeight;
-                const containerOffsetTop = containerRef.current.getBoundingClientRect().top;
-
-                setScrollState({
-                    windowHeight,
-                    windowWidth,
-                    windowScrollY,
-                    containerScrollWidth,
-                    containerScrollHeight,
-                    containerOffsetTop,
-                });
-            }}
-            className={classes.container}
-            style={{
-                paddingTop: containerPaddingTop,
-                paddingBottom: containerPaddingBottom,
-            }}
+            id='virtualized-scroller-root'
+            style={{border: '1px solid #f00'}}
         >
-            {items.map((item, i) => {
-                if (visibleCellIndices.includes(i) === true) {
-
-                    const curItemId = item.id;
-
-                    if (items.filter(e => e.id === curItemId).length > 1) {
-                        console.log('\n\n=========================== multiple posts with same ID!!! ===========================\n\n');
+            <div 
+                id='virtualized-scroller-content'
+                ref={(ref) => {
+                    
+                    if (containerRef.current !== null) {
+                        return;
                     }
-
-                    return (
-                        <ItemComponent 
-                            ref={(ref) => {
-                                if (ref === null) {
-                                    return;
-                                }
-                                
-                                itemHeightCache.current[i] = ref.clientHeight;
-                            }}
-                            key={item.id}
-                            descriptor={item}
-                        />
-                    );
-                } else {
-                    return null;
-                }
-            })}
+                    
+                    const topMargin = ref.getBoundingClientRect().top;
+                    containerRef.current = ref;
+                    containerTopMargin.current = topMargin;
+                    // console.log('🤢get container ref');
+                    handleScrollEvent();
+                }}
+                className={classes.container}
+                style={{
+                    paddingTop: projection === null ? 0 : projection.beforePadder,
+                    paddingBottom: projection === null ? 0 : projection.afterPadder,
+                }}
+            >
+                {items.map((item, i) => {
+                    if (projection === null) {
+                        if (i >= 0 && i < 10) {
+                            return renderItem(item, i);
+                        } else {
+                            return null;
+                        }
+                    } else {
+                        if (projection.visibleItemIndices.includes(i) === true) {
+                            return renderItem(item, i);
+                        } else {
+                            return null;
+                        }
+                    }
+                })}
+            </div>
         </div>
     );
 }

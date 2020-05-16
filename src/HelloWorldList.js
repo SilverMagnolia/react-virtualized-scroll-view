@@ -38,7 +38,7 @@ export default function HelloWorldList(props) {
 
         const num = 15;
 
-        console.info('🍀 fetch: ', offset);
+        // console.info('🍀 fetch: ', offset);
 
         fetch(`https://www.mogao.io/api/posts/latest/${offset}/${num}`, {
             method: 'get',
@@ -81,7 +81,7 @@ export default function HelloWorldList(props) {
 
 const useCellStyels = makeStyles({
     cellWrapper: {
-        borderBottom: '1px solid #333',
+        // borderBottom: '1px solid #333',
         color: 'black',
         fontSize: 18,
         padding: 16,
