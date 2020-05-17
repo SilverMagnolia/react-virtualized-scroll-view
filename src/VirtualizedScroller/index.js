@@ -9,15 +9,7 @@ VirtualizedScroller.propTypes ={
 };
 
 const useStyles = makeStyles({
-    container: (props) => ({
-        ...(typeof props.containerInset === 'object' 
-        ? {
-            paddingTop: props.containerInset.top, 
-            paddingLeft: props.containerInset.left, 
-            paddingRight: props.containerInset.right, 
-            paddingBottom: props.containerInset.bottom
-        } : {}),
-    })
+    container: {}
 });
 
 function Rect(x, y, width, height) {
@@ -63,16 +55,6 @@ function calcLayout(visibleRect, numOfItems, itemRectCache, windowHeight) {
         curY += cellHeight;
     }
 
-    // const itemRectsAboveLastVisibleItem = itemRectCache.slice(0, visibleCellIndices[visibleCellIndices.length - 1] + 1);
-
-    // const sumOfDirtyHeightOnTopItems = itemRectsAboveLastVisibleItem
-    //     .filter(i => i.dirtyHeight !== null)
-    //     .map(i => i.dirtyHeight)
-    //     .reduce((total, n) => n + total, 0);
-    
-    // console.info('🦊', sumOfDirtyHeightOnTopItems);
-    // containerPaddingBottom -= sumOfDirtyHeightOnTopItems;
-
     return {visibleCellIndices, containerPaddingTop, containerPaddingBottom};
 }
 
@@ -87,10 +69,10 @@ function getComponentRect(componentRef) {
     return new Rect(x, y, width, height);
 }
 
-// function RestorationInfo(itemRects, visibleIndices) {
-//     this.itemRects = itemRects;
-//     this.visibleIndices = visibleIndices;
-// }
+function RestorationInfo(projection, itemRectCache) {
+    this.projection = projection;
+    this.itemRectCache = itemRectCache;
+}
 
 function Projection(visibleItemIndices, beforePadder, afterPadder) {
     this.visibleItemIndices = visibleItemIndices;
@@ -98,130 +80,179 @@ function Projection(visibleItemIndices, beforePadder, afterPadder) {
     this.afterPadder = afterPadder;
 }
 
+function calcLayoutWithEstimatedHeightAtInit(numOfItems) {
+    const visibleRectMaxY = window.innerHeight;
+    const visibleItemIndices = [];
+    
+    let containerPaddingTop = 0;
+    let containerPaddingBottom = 0;
+
+    let curY = 0
+
+    for (let i = 0; i < numOfItems; i++) {
+
+        if (curY <= visibleRectMaxY) {
+            visibleItemIndices.push(i);
+        } else {
+            containerPaddingBottom += ESTIMATED_CELL_HEIGHT;
+        }
+
+        curY += ESTIMATED_CELL_HEIGHT;
+    }    
+    return {visibleItemIndices, containerPaddingTop, containerPaddingBottom};
+}
+
+let findInconsistency = false;
+let restorationCache = null;
+
 export default function VirtualizedScroller(props) {
     const classes = useStyles(props);
     const {items, itemComponent} = props;
 
-    const [scrollState, setScrollState] = useState(null);
-    const [projection, setProjection] = useState(null);
+    const [projection, setProjection] = useState(restorationCache === null ? null : restorationCache.projection);
 
     const containerRef = useRef(null);
     const containerTopMargin = useRef(null);
-    const itemRectCache = useRef([]);
-    
+    const itemRectCache = useRef((() => {
+        if (restorationCache === null) {
+            const arr = new Array(props.items.length);
+            return arr.map((_, i) => new Rect(0, i * ESTIMATED_CELL_HEIGHT, window.innerWidth, ESTIMATED_CELL_HEIGHT));
+        } else {
+            return restorationCache.itemRectCache;
+        }
+    })());
+    const itemRefs = useRef(new Array(props.items.length));
     const isResizing = useRef(false);
 
-    // const curVisibleCellIndices = useRef(null);
-    // const itemHeightCache = useRef(new Array(props.items.length));
-
     const ItemComponent = itemComponent;
+
+    useEffect(() => {
+        return () => {
+            const haha = new RestorationInfo(
+                projection, 
+                [...itemRectCache.current]
+            );
+            restorationCache = haha;
+        }
+    }, [projection]);
 
     useEffect(() => {
         const scrollEventHandler = () => {
             if (isResizing.current === true) {
                 return;
             }
-            // console.log('scroll')
+            
             handleScrollEvent();
         };
 
         window.addEventListener('scroll', scrollEventHandler);
         return () => window.removeEventListener('scroll', scrollEventHandler);
-    }, []);
+    }, [projection]);
 
-    useEffect(() => {
-        let timer = null;
-        const resizeEventHandler = () => {
-            if (timer !== null) {
-                clearTimeout(timer);
-            }
+    // useEffect(() => {
+    //     let timer = null;
+    //     const resizeEventHandler = () => {
+    //         if (timer !== null) {
+    //             clearTimeout(timer);
+    //         }
 
-            isResizing.current = true;
-            // console.log('resize')
+    //         isResizing.current = true;
 
-            timer = setTimeout(() => {
-                // console.log('🦊 end resizing')
-                isResizing.current = false;
-                handleScrollEvent();
-            }, 300);
-        }
+    //         timer = setTimeout(() => {
+    //             isResizing.current = false;
+    //             handleScrollEvent();
+    //         }, 300);
+    //     }
 
-        window.addEventListener('resize', resizeEventHandler);
-        return () => window.removeEventListener('resize', resizeEventHandler);
-    }, []);
+    //     window.addEventListener('resize', resizeEventHandler);
+    //     return () => window.removeEventListener('resize', resizeEventHandler);
+    // }, []);
 
     function handleScrollEvent() {
-        const windowHeight = window.innerHeight;
-        const windowWidth = window.innerWidth;
-        const windowScrollY = window.scrollY;
-        const containerScrollWidth = containerRef.current.scrollWidth;
-        const containerScrollHeight = containerRef.current.scrollHeight;
-        const containerOffsetTop = containerRef.current.getBoundingClientRect().top;
+        if (projection === null) {
+            return;
+        }
 
-        setScrollState({
-            windowHeight,
-            windowWidth,
+        const windowHeight = window.innerHeight;
+        // const windowWidth = window.innerWidth;
+        const windowScrollY = window.scrollY;
+        // const containerScrollWidth = containerRef.current.scrollWidth;
+        // const containerScrollHeight = containerRef.current.scrollHeight;
+        // const containerOffsetTop = containerRef.current.getBoundingClientRect().top;
+
+        const visibleRect = new Rect(
+            0, 
             windowScrollY,
-            containerScrollWidth,
-            containerScrollHeight,
-            containerOffsetTop,
-        });
+            window.innerWidth,
+            window.innerHeight
+        );
+    
+        const {
+            visibleCellIndices, 
+            containerPaddingTop, 
+            containerPaddingBottom
+        } = calcLayout(
+            visibleRect, 
+            props.items.length, 
+            itemRectCache.current, 
+            windowHeight
+        );
+
+        setProjection(new Projection(visibleCellIndices, containerPaddingTop, containerPaddingBottom));
     }
 
-    // const visibleRect = new Rect(
-    //     0, 
-    //     scrollState === null ? 0 : scrollState.windowScrollY,
-    //     window.innerWidth,
-    //     window.innerHeight
-    // );
-
-    // const {
-    //     visibleCellIndices, 
-    //     containerPaddingTop, 
-    //     containerPaddingBottom
-    // } = calcLayout(
-    //     visibleRect, 
-    //     props.items.length, 
-    //     itemRectCache.current, 
-    //     scrollState === null ? null : scrollState.windowHeight
-    // );
-    
-    console.info('😈 render - item rect cache: ', [...itemRectCache.current]);
-    
-    function renderItem(itemDescriptor, i) {
+    function renderItem(itemDescriptor, i, lastVisibleItemIndex) {
         return (
             <ItemComponent 
                 ref={(ref) => {
                     if (ref === null) {
                         return;
                     }
-                    // console.log(`🦊get ref: ${i}`);
+
+                    itemRefs.current[i] = ref;
                     const curItemRect = getComponentRect(ref);
-                    const prevItemRect = itemRectCache.current[i];
+                    
+
+                    if (
+                        (itemRectCache.current[i] === null || itemRectCache.current[i] === undefined)
+                    ) {
+                        findInconsistency = true;
+                    } else {
+                        const prevHeight = itemRectCache.current[i].height;
+                        const curHeight = curItemRect.height;
+
+                        if (Math.abs(curHeight - prevHeight) >= 10) {
+                            findInconsistency = true;
+                        }
+                    }
 
                     itemRectCache.current[i] = curItemRect;
 
-                    if (
-                        prevItemRect !== undefined && prevItemRect !== null 
-                        && prevItemRect.height !== curItemRect.height
-                        && Math.abs(curItemRect.height - prevItemRect.height) > 10
-                    ) {
-                        // 불일치
-                        // console.log(`🤡 ${i}) found inconsistency: ${curItemRect.height - prevItemRect.height}`);
-                        // handleScrollEvent();
-                        // document.getElementById('virtualized-scroller-root').style.transform = `translateY(${-(curItemRect.height - prevItemRect.height)}px)`;
-                        // document.getElementById('virtualized-scroller-content').style.paddingTop += (curItemRect.height - prevItemRect.height);
-                    } else {
-                        // document.getElementById('virtualized-scroller-root').style.transform = null;
+                    if (lastVisibleItemIndex === i && findInconsistency) {
+                        findInconsistency = false;
+                        const windowScrollY = window.scrollY;
+                        const windowHeight = window.innerHeight;
+
+                        const visibleRect = new Rect(
+                            0, 
+                            windowScrollY,
+                            window.innerWidth,
+                            window.innerHeight
+                        );
+                    
+                        const {
+                            visibleCellIndices, 
+                            containerPaddingTop, 
+                            containerPaddingBottom
+                        } = calcLayout(
+                            visibleRect, 
+                            props.items.length, 
+                            itemRectCache.current, 
+                            windowHeight
+                        );
+
+                        setProjection(new Projection(visibleCellIndices, containerPaddingTop, containerPaddingBottom));
                     }
-
-                    console.info(`${i}th item loaded: ` , [...itemRectCache.current]);
-
-                    // if (i === visibleCellIndices[visibleCellIndices.length - 1]) {
-                    //     // check inconsistency. how?
-                    //     // 
-                    //     console.log('🍀 finished rendering items!!!!')
-                    // }
                 }}
                 key={itemDescriptor.id}
                 descriptor={itemDescriptor}
@@ -231,45 +262,40 @@ export default function VirtualizedScroller(props) {
 
     return (
         <div 
-            id='virtualized-scroller-root'
-            style={{border: '1px solid #f00'}}
+            ref={(ref) => {
+                
+                if (containerRef.current !== null) {
+                    return;
+                }
+                
+                const topMargin = ref.getBoundingClientRect().top;
+                containerRef.current = ref;
+                containerTopMargin.current = topMargin;
+                handleScrollEvent();
+            }}
+            className={classes.container}
+            style={{
+                paddingTop: projection === null ? 0 : projection.beforePadder,
+                paddingBottom: projection === null ? 0 : projection.afterPadder,
+            }}
         >
-            <div 
-                id='virtualized-scroller-content'
-                ref={(ref) => {
-                    
-                    if (containerRef.current !== null) {
-                        return;
-                    }
-                    
-                    const topMargin = ref.getBoundingClientRect().top;
-                    containerRef.current = ref;
-                    containerTopMargin.current = topMargin;
-                    // console.log('🤢get container ref');
-                    handleScrollEvent();
-                }}
-                className={classes.container}
-                style={{
-                    paddingTop: projection === null ? 0 : projection.beforePadder,
-                    paddingBottom: projection === null ? 0 : projection.afterPadder,
-                }}
-            >
-                {items.map((item, i) => {
-                    if (projection === null) {
-                        if (i >= 0 && i < 10) {
-                            return renderItem(item, i);
-                        } else {
-                            return null;
-                        }
+            {items.map((item, i) => {
+                if (projection === null) {
+                    const {visibleItemIndices} = calcLayoutWithEstimatedHeightAtInit(props.items.length);
+                    if (visibleItemIndices.includes(i) === true) {
+                        return renderItem(item, i, visibleItemIndices[visibleItemIndices.length - 1]);
                     } else {
-                        if (projection.visibleItemIndices.includes(i) === true) {
-                            return renderItem(item, i);
-                        } else {
-                            return null;
-                        }
+                        return null;
                     }
-                })}
-            </div>
+
+                } else {
+                    if (projection.visibleItemIndices.includes(i) === true) {
+                        return renderItem(item, i, projection.visibleItemIndices[projection.visibleItemIndices.length - 1]);
+                    } else {
+                        return null;
+                    }
+                }
+            })}
         </div>
     );
 }
