@@ -1,16 +1,20 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import React, {useEffect, useState, useRef} from 'react';
-import {makeStyles} from '@material-ui/core';
-import PropTypes, { elementType } from 'prop-types';
-import _ from 'lodash';
+import PropTypes from 'prop-types';
 
 VirtualizedScroller.propTypes ={
     items: PropTypes.array.isRequired,
-    itemComponent: elementType.isRequired,
+    itemComponent: PropTypes.elementType.isRequired,
+    itemVerticalSpacing: PropTypes.number.isRequired,
+
+    onDismiss: PropTypes.func.isRequired,
+    scrollRestorationInfo: PropTypes.shape({
+        projection: PropTypes.object.isRequired,
+        itemRects: PropTypes.array.isRequired,
+    })
 };
 
-const useStyles = makeStyles({
-    container: {}
-});
+const ESTIMATED_CELL_HEIGHT = 100;
 
 function Rect(x, y, width, height) {
     this.x = x;
@@ -19,28 +23,26 @@ function Rect(x, y, width, height) {
     this.height = height;
 }
 
-const ESTIMATED_CELL_HEIGHT = 100;
-
-function calcLayout(visibleRect, numOfItems, itemRectCache, windowHeight) {
+function calcLayout(visibleRect, numOfItems, itemRectCache, scrollContainerMarginTop, itemVerticalSpacing) {
+    // console.info('\n>>>🤢🤢🤢 visibleRect: ', visibleRect)
     const visibleRectY = visibleRect.y;
     const visibleRectMaxY = visibleRect.y + visibleRect.height;
-    const invisibleRenderingHeight = windowHeight === null ? 300 : windowHeight / 2;
-
+    const invisibleRenderingHeight = visibleRect.height + visibleRect.height / 3;
     const visibleCellIndices = [];
-    
+
     let containerPaddingTop = 0;
     let containerPaddingBottom = 0;
 
-    let curY = 0
+    let curY = scrollContainerMarginTop;
 
     for (let i = 0; i < numOfItems; i++) {
-        const cellHeight = (itemRectCache[i] === undefined || itemRectCache[i] === null) 
-            ? ESTIMATED_CELL_HEIGHT 
-            : itemRectCache[i].height;
+        const cellHeight = (itemRectCache[i] === undefined || itemRectCache[i] === null)
+            ? ESTIMATED_CELL_HEIGHT + (itemVerticalSpacing || 0)
+            : itemRectCache[i].height + (itemVerticalSpacing || 0);
 
         const ithCellY = curY;
         const ithCellMaxY = ithCellY + cellHeight;
-        
+
         if (
             ithCellY <= (visibleRectMaxY + invisibleRenderingHeight)
             && ithCellMaxY >= (visibleRectY - invisibleRenderingHeight)
@@ -54,7 +56,6 @@ function calcLayout(visibleRect, numOfItems, itemRectCache, windowHeight) {
 
         curY += cellHeight;
     }
-
     return {visibleCellIndices, containerPaddingTop, containerPaddingBottom};
 }
 
@@ -69,233 +70,200 @@ function getComponentRect(componentRef) {
     return new Rect(x, y, width, height);
 }
 
-function RestorationInfo(projection, itemRectCache) {
-    this.projection = projection;
-    this.itemRectCache = itemRectCache;
-}
-
-function Projection(visibleItemIndices, beforePadder, afterPadder) {
+function Projection(visibleItemIndices, beforePadder, afterPadder, scrollContainerMarginTop) {
     this.visibleItemIndices = visibleItemIndices;
     this.beforePadder = beforePadder;
     this.afterPadder = afterPadder;
+    this.scrollContainerMarginTop = scrollContainerMarginTop;
 }
-
-function calcLayoutWithEstimatedHeightAtInit(numOfItems) {
-    const visibleRectMaxY = window.innerHeight;
-    const visibleItemIndices = [];
-    
-    let containerPaddingTop = 0;
-    let containerPaddingBottom = 0;
-
-    let curY = 0
-
-    for (let i = 0; i < numOfItems; i++) {
-
-        if (curY <= visibleRectMaxY) {
-            visibleItemIndices.push(i);
-        } else {
-            containerPaddingBottom += ESTIMATED_CELL_HEIGHT;
-        }
-
-        curY += ESTIMATED_CELL_HEIGHT;
-    }    
-    return {visibleItemIndices, containerPaddingTop, containerPaddingBottom};
-}
-
-let findInconsistency = false;
-let restorationCache = null;
 
 export default function VirtualizedScroller(props) {
-    const classes = useStyles(props);
     const {items, itemComponent} = props;
 
-    const [projection, setProjection] = useState(restorationCache === null ? null : restorationCache.projection);
+    const [projection, setProjection] = useState(
+        props.scrollRestorationInfo !== null && props.scrollRestorationInfo !== undefined
+        ? props.scrollRestorationInfo.projection
+        : null
+    );
 
     const containerRef = useRef(null);
-    const containerTopMargin = useRef(null);
-    const itemRectCache = useRef((() => {
-        if (restorationCache === null) {
-            const arr = new Array(props.items.length);
-            return arr.map((_, i) => new Rect(0, i * ESTIMATED_CELL_HEIGHT, window.innerWidth, ESTIMATED_CELL_HEIGHT));
-        } else {
-            return restorationCache.itemRectCache;
-        }
-    })());
-    const itemRefs = useRef(new Array(props.items.length));
-    const isResizing = useRef(false);
+    const didInitFirstProjection = useRef(props.scrollRestorationInfo !== null && props.scrollRestorationInfo !== undefined ? true : false);
+    const foundItemHeightInconsistency = useRef(false);
+    const lastProjection = useRef(null);
+
+    const itemRectCache = useRef(
+        props.scrollRestorationInfo !== null && props.scrollRestorationInfo !== undefined
+        ? props.scrollRestorationInfo.itemRects
+        : Array(props.items.length).fill().map((_, i) => new Rect(0, i * ESTIMATED_CELL_HEIGHT, window.innerWidth, ESTIMATED_CELL_HEIGHT))
+    );
 
     const ItemComponent = itemComponent;
 
     useEffect(() => {
-        return () => {
-            const haha = new RestorationInfo(
-                projection, 
-                [...itemRectCache.current]
-            );
-            restorationCache = haha;
-        }
-    }, [projection]);
+        if (props.scrollRestorationInfo !== null && props.scrollRestorationInfo !== undefined) {
+            // console.info('🍀🍀🍀🍀 restore ', props.scrollRestorationInfo);
 
-    useEffect(() => {
-        const scrollEventHandler = () => {
-            if (isResizing.current === true) {
+            window.scrollTo(
+                0, 
+                // props.scrollRestorationInfo.windowScrollY + props.scrollRestorationInfo.projection.scrollContainerMarginTop
+                props.scrollRestorationInfo.windowScrollY
+            );
+        }
+
+        return () => {
+            if (lastProjection.current === null) {
                 return;
             }
-            
+
+            const restorationInfo = {
+                projection: lastProjection.current,
+                itemRects: [...itemRectCache.current],
+                windowScrollY: window.scrollY,
+                // scrollContainerScrollY: containerRef.current.getBoundingClientRect().top,
+                // scrollContainerMarginTop: window.scrollY + containerRef.current.getBoundingClientRect().top,
+            };
+
+            // console.info('🤡🤡🤡🤡 onDismiss(restorationInfo) ', restorationInfo);
+            props.onDismiss(restorationInfo);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (
+            (items.length > 0 && didInitFirstProjection.current === false)
+        ) {
+            setProjection(new Projection(
+                Array(props.items.length).fill().map((_, i) => i),
+                0,
+                0,
+                0
+            ));
+            didInitFirstProjection.current = true
+        }
+    }, [props.items.length]);
+
+    useEffect(() => {
+        lastProjection.current = projection;
+        const scrollEventHandler = () => {
             handleScrollEvent();
         };
 
         window.addEventListener('scroll', scrollEventHandler);
-        return () => window.removeEventListener('scroll', scrollEventHandler);
+        return () => {
+            window.removeEventListener('scroll', scrollEventHandler);
+        };
     }, [projection]);
 
-    // useEffect(() => {
-    //     let timer = null;
-    //     const resizeEventHandler = () => {
-    //         if (timer !== null) {
-    //             clearTimeout(timer);
-    //         }
-
-    //         isResizing.current = true;
-
-    //         timer = setTimeout(() => {
-    //             isResizing.current = false;
-    //             handleScrollEvent();
-    //         }, 300);
-    //     }
-
-    //     window.addEventListener('resize', resizeEventHandler);
-    //     return () => window.removeEventListener('resize', resizeEventHandler);
-    // }, []);
-
     function handleScrollEvent() {
-        if (projection === null) {
+        calcProjection();
+    }
+
+    function calcProjection() {
+        if (projection === null || containerRef.current === null) {
             return;
         }
 
         const windowHeight = window.innerHeight;
-        // const windowWidth = window.innerWidth;
         const windowScrollY = window.scrollY;
-        // const containerScrollWidth = containerRef.current.scrollWidth;
-        // const containerScrollHeight = containerRef.current.scrollHeight;
-        // const containerOffsetTop = containerRef.current.getBoundingClientRect().top;
+
+        const scrollContainerRect = containerRef.current.getBoundingClientRect();
+        const scrollContainerWidth = containerRef.current.scrollWidth;
+        const scrollContainerMarginLeft = scrollContainerRect.left;
+        const scrollContainerMarginTop = windowScrollY + scrollContainerRect.top;
 
         const visibleRect = new Rect(
-            0, 
-            windowScrollY,
-            window.innerWidth,
-            window.innerHeight
+            scrollContainerMarginLeft,
+            windowScrollY + scrollContainerMarginTop,
+            scrollContainerWidth,
+            windowHeight - scrollContainerMarginTop
         );
-    
+
         const {
-            visibleCellIndices, 
-            containerPaddingTop, 
+            visibleCellIndices,
+            containerPaddingTop,
             containerPaddingBottom
         } = calcLayout(
-            visibleRect, 
-            props.items.length, 
-            itemRectCache.current, 
-            windowHeight
+            visibleRect,
+            props.items.length,
+            itemRectCache.current,
+            scrollContainerMarginTop,
+            props.itemVerticalSpacing
         );
 
-        setProjection(new Projection(visibleCellIndices, containerPaddingTop, containerPaddingBottom));
+        setProjection(new Projection(
+            visibleCellIndices, 
+            containerPaddingTop, 
+            containerPaddingBottom,
+            scrollContainerMarginTop
+        ));
     }
 
-    function renderItem(itemDescriptor, i, lastVisibleItemIndex) {
+    function renderItem(itemDescriptor, i) {
         return (
-            <ItemComponent 
+            <ItemComponent
                 ref={(ref) => {
                     if (ref === null) {
                         return;
                     }
 
-                    itemRefs.current[i] = ref;
+                    const prevItemRect = itemRectCache.current[i] || null;
                     const curItemRect = getComponentRect(ref);
-                    
 
-                    if (
-                        (itemRectCache.current[i] === null || itemRectCache.current[i] === undefined)
-                    ) {
-                        findInconsistency = true;
-                    } else {
-                        const prevHeight = itemRectCache.current[i].height;
-                        const curHeight = curItemRect.height;
-
-                        if (Math.abs(curHeight - prevHeight) >= 10) {
-                            findInconsistency = true;
-                        }
+                    if (prevItemRect === null || (prevItemRect.height !== curItemRect.height)) {
+                        foundItemHeightInconsistency.current = true;
                     }
 
                     itemRectCache.current[i] = curItemRect;
 
-                    if (lastVisibleItemIndex === i && findInconsistency) {
-                        findInconsistency = false;
-                        const windowScrollY = window.scrollY;
-                        const windowHeight = window.innerHeight;
+                    const shouldRecalcProjection =
+                        i === projection.visibleItemIndices[projection.visibleItemIndices.length - 1]
+                        && foundItemHeightInconsistency.current === true;
 
-                        const visibleRect = new Rect(
-                            0, 
-                            windowScrollY,
-                            window.innerWidth,
-                            window.innerHeight
-                        );
-                    
-                        const {
-                            visibleCellIndices, 
-                            containerPaddingTop, 
-                            containerPaddingBottom
-                        } = calcLayout(
-                            visibleRect, 
-                            props.items.length, 
-                            itemRectCache.current, 
-                            windowHeight
-                        );
-
-                        setProjection(new Projection(visibleCellIndices, containerPaddingTop, containerPaddingBottom));
+                    if (shouldRecalcProjection === true) {
+                        calcProjection();
+                        foundItemHeightInconsistency.current = false;
                     }
                 }}
-                key={itemDescriptor.id}
+                key={itemDescriptor.postInfo.id}
                 descriptor={itemDescriptor}
             />
         )
     }
 
+    const scrollContainerPaddingTop = projection === null || items.length === 0 ? 0 : projection.beforePadder;
+    const scrollContainerPaddingBottom = projection === null || items.length === 0 ? 0 : projection.afterPadder;
+
+    // console.info('🦊 items: ', props.items.length);
+    // console.info('🐽', projection);
+    // console.info('🤢', itemRectCache.current);
+
     return (
-        <div 
+        <div
             ref={(ref) => {
-                
-                if (containerRef.current !== null) {
+                if (ref === null) {
                     return;
                 }
-                
-                const topMargin = ref.getBoundingClientRect().top;
+
+                if (containerRef.current === null && props.scrollRestorationInfo) {
+                    // ref.scroll(0, props.scrollRestorationInfo.scrollContainerTop)
+                }
+
                 containerRef.current = ref;
-                containerTopMargin.current = topMargin;
-                handleScrollEvent();
             }}
-            className={classes.container}
             style={{
-                paddingTop: projection === null ? 0 : projection.beforePadder,
-                paddingBottom: projection === null ? 0 : projection.afterPadder,
+                paddingTop: scrollContainerPaddingTop,
+                paddingBottom: scrollContainerPaddingBottom,
             }}
         >
-            {items.map((item, i) => {
-                if (projection === null) {
-                    const {visibleItemIndices} = calcLayoutWithEstimatedHeightAtInit(props.items.length);
-                    if (visibleItemIndices.includes(i) === true) {
-                        return renderItem(item, i, visibleItemIndices[visibleItemIndices.length - 1]);
-                    } else {
-                        return null;
-                    }
-
-                } else {
+            {projection !== null && items.length > 0 &&
+                items.map((item, i) => {
                     if (projection.visibleItemIndices.includes(i) === true) {
-                        return renderItem(item, i, projection.visibleItemIndices[projection.visibleItemIndices.length - 1]);
+                        return renderItem(item, i);
                     } else {
                         return null;
                     }
-                }
-            })}
+                })
+            }
         </div>
     );
 }
