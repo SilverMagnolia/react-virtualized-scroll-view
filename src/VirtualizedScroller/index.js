@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, {useEffect, useState, useRef} from 'react';
 import PropTypes from 'prop-types';
+import _ from 'lodash';
 
 VirtualizedScroller.propTypes ={
     items: PropTypes.array.isRequired,
@@ -29,8 +30,8 @@ function calcLayout(visibleRect, numOfItems, itemRectCache, scrollContainerMargi
     const invisibleRenderingHeight = visibleRect.height + visibleRect.height / 3;
     const visibleCellIndices = [];
 
-    let containerPaddingTop = 0;
-    let containerPaddingBottom = 0;
+    let paddingTop = 0;
+    let paddingBottom = 0;
 
     let curY = scrollContainerMarginTop;
 
@@ -48,14 +49,14 @@ function calcLayout(visibleRect, numOfItems, itemRectCache, scrollContainerMargi
         ) {
             visibleCellIndices.push(i);
         } else if (visibleCellIndices.length === 0) {
-            containerPaddingTop += cellHeight;
+            paddingTop += cellHeight;
         } else {
-            containerPaddingBottom += cellHeight;
+            paddingBottom += cellHeight;
         }
 
         curY += cellHeight;
     }
-    return {visibleCellIndices, containerPaddingTop, containerPaddingBottom};
+    return {visibleCellIndices, paddingTop, paddingBottom};
 }
 
 function getComponentRect(componentRef) {
@@ -69,10 +70,10 @@ function getComponentRect(componentRef) {
     return new Rect(x, y, width, height);
 }
 
-function Projection(visibleItemIndices, beforePadder, afterPadder, windowScrollY) {
+function Projection(visibleItemIndices, paddingTop, paddingBottom, windowScrollY) {
     this.visibleItemIndices = visibleItemIndices;
-    this.beforePadder = beforePadder;
-    this.afterPadder = afterPadder;
+    this.paddingTop = paddingTop;
+    this.paddingBottom = paddingBottom;
     this.windowScrollY = windowScrollY;
 }
 
@@ -105,7 +106,7 @@ export default function VirtualizedScroller(props) {
         }
 
         return () => {
-            // create restoreation info to restore scroll.
+            // create restoration info to restore scroll.
             if (lastProjection.current === null) {
                 return;
             }
@@ -149,7 +150,7 @@ export default function VirtualizedScroller(props) {
         calcProjection();
     }
 
-    function calcProjection() {
+    function calcProjection(){
         if (projection === null || containerRef.current === null) {
             return;
         }
@@ -171,8 +172,8 @@ export default function VirtualizedScroller(props) {
 
         const {
             visibleCellIndices,
-            containerPaddingTop,
-            containerPaddingBottom
+            paddingTop,
+            paddingBottom
         } = calcLayout(
             visibleRect,
             props.items.length,
@@ -183,11 +184,11 @@ export default function VirtualizedScroller(props) {
 
         setProjection(new Projection(
             visibleCellIndices, 
-            containerPaddingTop, 
-            containerPaddingBottom,
-            windowScrollY
+            paddingTop, 
+            paddingBottom,
+            windowScrollY // 스크롤 복구에 쓰임
         ));
-    }
+    };
 
     function renderItem(itemDescriptor, i) {
         return (
@@ -201,6 +202,7 @@ export default function VirtualizedScroller(props) {
                     const curItemRect = getComponentRect(ref);
 
                     if (prevItemRect === null || (prevItemRect.height !== curItemRect.height)) {
+                        // 1. 캐시에 있는 아이템의 높이와 현재 아이템의 높이가 불일치하면,
                         foundItemHeightInconsistency.current = true;
                     }
 
@@ -211,6 +213,7 @@ export default function VirtualizedScroller(props) {
                         && foundItemHeightInconsistency.current === true;
 
                     if (shouldRecalcProjection === true) {
+                        // 2. 프로젝션 재계산 -> 렌더링.
                         calcProjection();
                         foundItemHeightInconsistency.current = false;
                     }
@@ -218,15 +221,11 @@ export default function VirtualizedScroller(props) {
                 key={itemDescriptor.id}
                 descriptor={itemDescriptor}
             />
-        )
+        );
     }
 
-    const scrollContainerPaddingTop = projection === null || items.length === 0 ? 0 : projection.beforePadder;
-    const scrollContainerPaddingBottom = projection === null || items.length === 0 ? 0 : projection.afterPadder;
-
-    // console.info('🦊 items: ', props.items.length);
-    // console.info('🐽', projection);
-    // console.info('🤢', itemRectCache.current);
+    const containerPaddingTop = projection === null || items.length === 0 ? 0 : projection.paddingTop;
+    const containerPaddingBottom = projection === null || items.length === 0 ? 0 : projection.paddingBottom;
 
     return (
         <div
@@ -238,8 +237,8 @@ export default function VirtualizedScroller(props) {
                 containerRef.current = ref;
             }}
             style={{
-                paddingTop: scrollContainerPaddingTop,
-                paddingBottom: scrollContainerPaddingBottom,
+                paddingTop: containerPaddingTop,
+                paddingBottom: containerPaddingBottom,
             }}
         >
             {projection !== null && items.length > 0 &&
