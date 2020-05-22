@@ -1,6 +1,11 @@
 import React, {forwardRef, useEffect, useState} from 'react';
 import VirtualizedScroller from './VirtualizedScroller';
-import {makeStyles, Container} from '@material-ui/core';
+import {
+    makeStyles, 
+    Container,
+    Tabs,
+    Tab
+} from '@material-ui/core';
 import { useHistory } from 'react-router-dom';
 import InfiniteScroll from 'react-infinite-scroll-component';
 
@@ -15,31 +20,65 @@ const PostDescriptionElementType = {
     inlineLink: 'inline-link',
 };
 
-let gPostList = [];
-let offset = 0;
+let state1 = null;
+let state2 = null;
+let state3 = null;
+
 let isLoading = false;
 
-export default function HelloWorldList(props) {
-    const [postList, setPostList] = useState(gPostList);
-    useEffect(() => {
-        if (postList.length > 0) {
-            return;
-        }
+let trendingRestorationInfo = null;
+let followingRestorationInfo = null;
+let freshRestorationInfo = null;
+let lastTabIndex = 0;
 
-        fetchPostList(offset);
+function PostListState(list, offset, hasMore) {
+    this.list = list;
+    this.offset = offset;
+    this.hasMore = hasMore;
+}
+
+export default function HelloWorldList(props) {
+    const [tabIndex, setTabIndex] = useState(lastTabIndex);
+
+    const [trendingState, setTrendingState] = useState(state1 || new PostListState([], 0, true));
+    const [followingState, setFollowingState] = useState(state2 || new PostListState([], 0, true));
+    const [freshState, setFreshState] = useState(state3 || new PostListState([], 0, true));
+    const [showSomething, setShowSomething] = useState(false);
+
+    useEffect(() => {
+        setTimeout(() => {
+            // setShowSomething(true);
+        }, 2000);
     }, []);
 
-    async function fetchPostList() {
+    useEffect(() => {
+        // console.log(`🌈 window.srollY: ${window.scrollY} / window.innerHeight: ${window.innerHeight}`)
+        // console.log('🌈 body.height ', document.body.clientHeight);
+        lastTabIndex = tabIndex;
+
+        if (tabIndex === 0 && trendingState.list.length === 0) {
+            fetchTrending(0);
+        } else if (tabIndex === 1 && followingState.list.length === 0) {
+            fetchFollowing(0);
+        } else if (tabIndex === 2 && freshState.list.length === 0) {
+            fetchFresh(0);
+        }
+        
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [tabIndex]);
+
+
+    async function fetchFresh(offset) {
         if (isLoading === true) {
             return;
         }
 
         isLoading = true;
 
-        const num = 15;
+        const num = 10;
 
-        // console.info('🍀 fetch: ', offset);
-
+        console.info('👅 fetch fresh: ', offset);
+        
         fetch(`https://www.mogao.io/api/posts/latest/${offset}/${num}`, {
             method: 'get',
             headers: {
@@ -50,10 +89,14 @@ export default function HelloWorldList(props) {
         })
         .then(response => response.json())
         .then(data => {
-            gPostList = postList.concat(data.list);
-            offset += num;
+            const newState = new PostListState(
+                freshState.list.concat(data.list),
+                offset += num,
+                data.list.length >= num    
+            );
+            state3 = newState;
             // console.info('👅 setPostList: ', gPostList.length);
-            setPostList(gPostList);
+            setFreshState(newState);
             isLoading = false;
         })
         .catch((error) => {
@@ -62,26 +105,162 @@ export default function HelloWorldList(props) {
         });
     }
 
+    async function fetchFollowing(offset) {
+        if (isLoading === true) {
+            return;
+        }
+
+        isLoading = true;
+
+        const num = 10;
+
+        console.info('🌈 fetch following: ', offset);
+        
+        fetch(`https://www.mogao.io/api/posts/follow/${offset}/${num}`, {
+            method: 'get',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'Authorization': 'fb901f32-89d3-4dcd-b376-5845143486b2'
+            },
+            body: null,
+        })
+        .then(response => response.json())
+        .then(data => {
+            const newState = new PostListState(
+                followingState.list.concat(data.list),
+                offset += num,
+                data.list.length >= num    
+            );
+            state2 = newState;
+            // console.info('👅 setPostList: ', gPostList.length);
+            setFollowingState(newState);
+            isLoading = false;
+        })
+        .catch((error) => {
+            console.error('Error:', error);
+            isLoading = false;
+        });
+    }
+
+    async function fetchTrending(offset) {
+        if (isLoading === true) {
+            return;
+        }
+
+        isLoading = true;
+
+        const num = 10;
+
+        console.info('🍀 fetch trending: ', offset);
+        
+        fetch(`https://www.mogao.io/api/posts/trending/${offset}/${num}`, {
+            method: 'get',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: null,
+        })
+        .then(response => response.json())
+        .then(data => {
+            const newState = new PostListState(
+                trendingState.list.concat(data.list),
+                offset += num,
+                data.list.length >= num    
+            );
+            state1 = newState;
+            // console.info('👅 setPostList: ', gPostList.length);
+            setTrendingState(newState);
+            isLoading = false;
+        })
+        .catch((error) => {
+            console.error('Error:', error);
+            isLoading = false;
+        });
+    }
+
+    
     return (
         <Container maxWidth='sm'>
-            <InfiniteScroll
-                dataLength={postList.length}
-                next={fetchPostList}
-                hasMore={true}
-                scrollThreshold={0.9}
-            >
-                <VirtualizedScroller 
-                    items={postList}
-                    itemComponent={Cell}
+            <MogaoTabBar
+                selectedIndex={tabIndex}
+                onChange={(newValue) => setTabIndex(newValue)}
+                items={['TRENDING', 'FOLLOWING', 'FRESH']}
+            />
+
+            {tabIndex === 0 && 
+                <>
+                <div style={{width: '100%', height: 50, backgroundColor: 'blue'}} />
+                <div style={{width: '100%', height: 100, backgroundColor: 'red'}} />
+                {showSomething === true && 
+                    <div style={{width: '100%', height: 100, backgroundColor: 'red'}} />
+                }   
+                <InfiniteFeedList 
+                    list={trendingState.list}
+                    hasMore={trendingState.hasMore}
+                    fetchFn={() => fetchTrending(trendingState.offset)}
+                    onDismiss={(restorationInfo) => trendingRestorationInfo = restorationInfo}
+                    scrollRestorationInfo={trendingRestorationInfo}
+                    name='trending'
                 />
-            </InfiniteScroll>
+                </>
+            }
+
+            {tabIndex === 1 && 
+                <>
+                {/* <div style={{width: '100%', height: 70, backgroundColor: 'blue'}} /> */}
+                <InfiniteFeedList 
+                    list={followingState.list}
+                    hasMore={followingState.hasMore}
+                    fetchFn={() => fetchFollowing(followingState.offset)}
+                    onDismiss={(restorationInfo) => followingRestorationInfo = restorationInfo}
+                    scrollRestorationInfo={followingRestorationInfo}
+                    name='following'
+                />
+                </>
+            }
+            
+            {tabIndex === 2 && 
+                <InfiniteFeedList 
+                    list={freshState.list}
+                    hasMore={freshState.hasMore}
+                    fetchFn={() => fetchFresh(freshState.offset)}
+                    onDismiss={(restorationInfo) => freshRestorationInfo = restorationInfo}
+                    scrollRestorationInfo={freshRestorationInfo}
+                    name='following'
+                />
+            }
         </Container>
+    );
+}
+
+function InfiniteFeedList(props) {
+    const {list, hasMore, fetchFn} = props;
+    
+    return (
+        <InfiniteScroll
+            dataLength={list.length}
+            next={fetchFn}
+            hasMore={hasMore}
+            scrollThreshold={0.9}
+            loader={<div>Loading...</div>}
+        >
+            <VirtualizedScroller 
+                items={list}
+                itemComponent={Cell}
+                itemVerticalSpacing={8}
+                onDismiss={props.onDismiss}
+                scrollRestorationInfo={props.scrollRestorationInfo}
+                name={props.name}
+            />
+        </InfiniteScroll>
     );
 }
 
 const useCellStyels = makeStyles({
     cellWrapper: {
-        // borderBottom: '1px solid #333',
+        borderBottom: '1px solid #333',
         color: 'black',
         fontSize: 18,
         padding: 16,
@@ -89,7 +268,8 @@ const useCellStyels = makeStyles({
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'center',
-        alignItems: 'center'
+        alignItems: 'center',
+        marginTop: 8
     },
     desc: {
         marginTop: 16,
@@ -309,4 +489,39 @@ function mogaoParseBase(origin) {
         splitComponentAndPlainText(strings[i], result);
 
     return result;
+}
+
+
+const useTabBarStyles = makeStyles(theme => ({
+    tabbar: {
+        width: '100%',
+        backgroundColor: 'white',
+        borderBottom: '2px solid black',
+        position: 'sticky',
+        top: 0,
+        left: 0,
+        zIndex: 100
+    },
+    tabText: {
+        color: theme.mainTextColor,
+        fontSize: 14,
+        fontWeight: 'bold'
+    },
+}));
+
+function MogaoTabBar(props) {
+    const classes = useTabBarStyles();
+    return (
+        <Tabs
+            value={props.selectedIndex}
+            className={classes.tabbar}
+            variant={props.variant ?? 'fullWidth'}
+            scrollButtons="off"
+            onChange={(_, newValue) => props.onChange(newValue)}
+        >
+            {props.items.map((tab, index) =>
+                <Tab label={tab} className={classes.tabText} key={index} />
+            )}
+        </Tabs>
+    );
 }

@@ -24,7 +24,6 @@ function Rect(x, y, width, height) {
 }
 
 function calcLayout(visibleRect, numOfItems, itemRectCache, scrollContainerMarginTop, itemVerticalSpacing) {
-    // console.info('\n>>>🤢🤢🤢 visibleRect: ', visibleRect)
     const visibleRectY = visibleRect.y;
     const visibleRectMaxY = visibleRect.y + visibleRect.height;
     const invisibleRenderingHeight = visibleRect.height + visibleRect.height / 3;
@@ -70,11 +69,11 @@ function getComponentRect(componentRef) {
     return new Rect(x, y, width, height);
 }
 
-function Projection(visibleItemIndices, beforePadder, afterPadder, scrollContainerMarginTop) {
+function Projection(visibleItemIndices, beforePadder, afterPadder, windowScrollY) {
     this.visibleItemIndices = visibleItemIndices;
     this.beforePadder = beforePadder;
     this.afterPadder = afterPadder;
-    this.scrollContainerMarginTop = scrollContainerMarginTop;
+    this.windowScrollY = windowScrollY;
 }
 
 export default function VirtualizedScroller(props) {
@@ -100,30 +99,22 @@ export default function VirtualizedScroller(props) {
     const ItemComponent = itemComponent;
 
     useEffect(() => {
+        // restore scroll  
         if (props.scrollRestorationInfo !== null && props.scrollRestorationInfo !== undefined) {
-            // console.info('🍀🍀🍀🍀 restore ', props.scrollRestorationInfo);
-
-            window.scrollTo(
-                0, 
-                // props.scrollRestorationInfo.windowScrollY + props.scrollRestorationInfo.projection.scrollContainerMarginTop
-                props.scrollRestorationInfo.windowScrollY
-            );
+            window.scrollTo(0, props.scrollRestorationInfo.projection.windowScrollY);
         }
 
         return () => {
+            // create restoreation info to restore scroll.
             if (lastProjection.current === null) {
                 return;
             }
 
             const restorationInfo = {
                 projection: lastProjection.current,
-                itemRects: [...itemRectCache.current],
-                windowScrollY: window.scrollY,
-                // scrollContainerScrollY: containerRef.current.getBoundingClientRect().top,
-                // scrollContainerMarginTop: window.scrollY + containerRef.current.getBoundingClientRect().top,
+                itemRects: [...itemRectCache.current]
             };
 
-            // console.info('🤡🤡🤡🤡 onDismiss(restorationInfo) ', restorationInfo);
             props.onDismiss(restorationInfo);
         }
     }, []);
@@ -194,7 +185,7 @@ export default function VirtualizedScroller(props) {
             visibleCellIndices, 
             containerPaddingTop, 
             containerPaddingBottom,
-            scrollContainerMarginTop
+            windowScrollY
         ));
     }
 
@@ -224,7 +215,7 @@ export default function VirtualizedScroller(props) {
                         foundItemHeightInconsistency.current = false;
                     }
                 }}
-                key={itemDescriptor.postInfo.id}
+                key={itemDescriptor.id}
                 descriptor={itemDescriptor}
             />
         )
@@ -242,10 +233,6 @@ export default function VirtualizedScroller(props) {
             ref={(ref) => {
                 if (ref === null) {
                     return;
-                }
-
-                if (containerRef.current === null && props.scrollRestorationInfo) {
-                    // ref.scroll(0, props.scrollRestorationInfo.scrollContainerTop)
                 }
 
                 containerRef.current = ref;
