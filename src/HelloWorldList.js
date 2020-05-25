@@ -1,5 +1,5 @@
 import React, {forwardRef, useEffect, useState} from 'react';
-import VirtualizedScroller from './VirtualizedScroller';
+import VirtualizedScroller from './VirtualScroller';
 import {
     makeStyles, 
     Container,
@@ -43,17 +43,13 @@ export default function HelloWorldList(props) {
     const [trendingState, setTrendingState] = useState(state1 || new PostListState([], 0, true));
     const [followingState, setFollowingState] = useState(state2 || new PostListState([], 0, true));
     const [freshState, setFreshState] = useState(state3 || new PostListState([], 0, true));
-    const [showSomething, setShowSomething] = useState(false);
 
     useEffect(() => {
         setTimeout(() => {
-            // setShowSomething(true);
         }, 2000);
     }, []);
 
     useEffect(() => {
-        // console.log(`🌈 window.srollY: ${window.scrollY} / window.innerHeight: ${window.innerHeight}`)
-        // console.log('🌈 body.height ', document.body.clientHeight);
         lastTabIndex = tabIndex;
 
         if (tabIndex === 0 && trendingState.list.length === 0) {
@@ -76,8 +72,6 @@ export default function HelloWorldList(props) {
         isLoading = true;
 
         const num = 10;
-
-        console.info('👅 fetch fresh: ', offset);
         
         fetch(`https://www.mogao.io/api/posts/latest/${offset}/${num}`, {
             method: 'get',
@@ -95,7 +89,6 @@ export default function HelloWorldList(props) {
                 data.list.length >= num    
             );
             state3 = newState;
-            // console.info('👅 setPostList: ', gPostList.length);
             setFreshState(newState);
             isLoading = false;
         })
@@ -113,8 +106,6 @@ export default function HelloWorldList(props) {
         isLoading = true;
 
         const num = 10;
-
-        console.info('🌈 fetch following: ', offset);
         
         fetch(`https://www.mogao.io/api/posts/follow/${offset}/${num}`, {
             method: 'get',
@@ -133,7 +124,6 @@ export default function HelloWorldList(props) {
                 data.list.length >= num    
             );
             state2 = newState;
-            // console.info('👅 setPostList: ', gPostList.length);
             setFollowingState(newState);
             isLoading = false;
         })
@@ -151,8 +141,6 @@ export default function HelloWorldList(props) {
         isLoading = true;
 
         const num = 10;
-
-        console.info('🍀 fetch trending: ', offset);
         
         fetch(`https://www.mogao.io/api/posts/trending/${offset}/${num}`, {
             method: 'get',
@@ -170,7 +158,6 @@ export default function HelloWorldList(props) {
                 data.list.length >= num    
             );
             state1 = newState;
-            // console.info('👅 setPostList: ', gPostList.length);
             setTrendingState(newState);
             isLoading = false;
         })
@@ -192,10 +179,6 @@ export default function HelloWorldList(props) {
             {tabIndex === 0 && 
                 <>
                 <div style={{width: '100%', height: 50, backgroundColor: 'blue'}} />
-                <div style={{width: '100%', height: 100, backgroundColor: 'red'}} />
-                {showSomething === true && 
-                    <div style={{width: '100%', height: 100, backgroundColor: 'red'}} />
-                }   
                 <InfiniteFeedList 
                     list={trendingState.list}
                     hasMore={trendingState.hasMore}
@@ -209,7 +192,6 @@ export default function HelloWorldList(props) {
 
             {tabIndex === 1 && 
                 <>
-                {/* <div style={{width: '100%', height: 70, backgroundColor: 'blue'}} /> */}
                 <InfiniteFeedList 
                     list={followingState.list}
                     hasMore={followingState.hasMore}

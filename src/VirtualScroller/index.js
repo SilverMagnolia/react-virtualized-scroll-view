@@ -1,9 +1,9 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, {useEffect, useState, useRef} from 'react';
 import PropTypes from 'prop-types';
-import _ from 'lodash';
+// import _ from 'lodash';
 
-VirtualizedScroller.propTypes ={
+VirtualScroller.propTypes ={
     items: PropTypes.array.isRequired,
     itemComponent: PropTypes.elementType.isRequired,
     itemVerticalSpacing: PropTypes.number.isRequired,
@@ -77,7 +77,7 @@ function Projection(visibleItemIndices, paddingTop, paddingBottom, windowScrollY
     this.windowScrollY = windowScrollY;
 }
 
-export default function VirtualizedScroller(props) {
+export default function VirtualScroller(props) {
     const {items, itemComponent} = props;
 
     const [projection, setProjection] = useState(
@@ -136,9 +136,10 @@ export default function VirtualizedScroller(props) {
 
     useEffect(() => {
         lastProjection.current = projection;
+        
         const scrollEventHandler = () => {
             handleScrollEvent();
-        };
+        }
 
         window.addEventListener('scroll', scrollEventHandler);
         return () => {
@@ -150,7 +151,7 @@ export default function VirtualizedScroller(props) {
         calcProjection();
     }
 
-    function calcProjection(){
+    function calcProjection() {
         if (projection === null || containerRef.current === null) {
             return;
         }
@@ -218,7 +219,7 @@ export default function VirtualizedScroller(props) {
                         foundItemHeightInconsistency.current = false;
                     }
                 }}
-                key={itemDescriptor.id}
+                key={i}
                 descriptor={itemDescriptor}
             />
         );
