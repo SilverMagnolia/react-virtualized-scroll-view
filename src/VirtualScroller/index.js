@@ -1,7 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, {useEffect, useState, useRef} from 'react';
 import PropTypes from 'prop-types';
-// import _ from 'lodash';
 
 VirtualScroller.propTypes ={
     items: PropTypes.array.isRequired,
@@ -24,16 +23,16 @@ function Rect(x, y, width, height) {
     this.height = height;
 }
 
-function calcLayout(visibleRect, numOfItems, itemRectCache, scrollContainerMarginTop, itemVerticalSpacing) {
+function calcProjection(visibleRect, numOfItems, itemRectCache, itemVerticalSpacing) {
     const visibleRectY = visibleRect.y;
     const visibleRectMaxY = visibleRect.y + visibleRect.height;
-    const invisibleRenderingHeight = visibleRect.height + visibleRect.height / 3;
+    const invisibleRenderingHeight = visibleRect.height * 0.25;
     const visibleCellIndices = [];
 
     let paddingTop = 0;
     let paddingBottom = 0;
 
-    let curY = scrollContainerMarginTop;
+    let curY = 0;
 
     for (let i = 0; i < numOfItems; i++) {
         const cellHeight = (itemRectCache[i] === undefined || itemRectCache[i] === null)
@@ -79,20 +78,21 @@ function Projection(visibleItemIndices, paddingTop, paddingBottom, windowScrollY
 
 export default function VirtualScroller(props) {
     const {items, itemComponent} = props;
+    const scrollRestorationInfoExists = props.scrollRestorationInfo !== null && props.scrollRestorationInfo !== undefined;
 
     const [projection, setProjection] = useState(
-        props.scrollRestorationInfo !== null && props.scrollRestorationInfo !== undefined
+        scrollRestorationInfoExists
         ? props.scrollRestorationInfo.projection
         : null
     );
 
     const containerRef = useRef(null);
-    const didInitFirstProjection = useRef(props.scrollRestorationInfo !== null && props.scrollRestorationInfo !== undefined ? true : false);
+    const didInitFirstProjection = useRef(scrollRestorationInfoExists);
     const foundItemHeightInconsistency = useRef(false);
     const lastProjection = useRef(null);
 
     const itemRectCache = useRef(
-        props.scrollRestorationInfo !== null && props.scrollRestorationInfo !== undefined
+        scrollRestorationInfoExists
         ? props.scrollRestorationInfo.itemRects
         : Array(props.items.length).fill().map((_, i) => new Rect(0, i * ESTIMATED_CELL_HEIGHT, window.innerWidth, ESTIMATED_CELL_HEIGHT))
     );
@@ -100,13 +100,13 @@ export default function VirtualScroller(props) {
     const ItemComponent = itemComponent;
 
     useEffect(() => {
-        // restore scroll  
-        if (props.scrollRestorationInfo !== null && props.scrollRestorationInfo !== undefined) {
+        // restore scroll position
+        if (scrollRestorationInfoExists) {
             window.scrollTo(0, props.scrollRestorationInfo.projection.windowScrollY);
         }
 
         return () => {
-            // create restoration info to restore scroll.
+            // create restoration info to restore scroll position.
             if (lastProjection.current === null) {
                 return;
             }
@@ -148,10 +148,10 @@ export default function VirtualScroller(props) {
     }, [projection]);
 
     function handleScrollEvent() {
-        calcProjection();
+        recalcAndSetProjection();
     }
 
-    function calcProjection() {
+    function recalcAndSetProjection() {
         if (projection === null || containerRef.current === null) {
             return;
         }
@@ -160,26 +160,22 @@ export default function VirtualScroller(props) {
         const windowScrollY = window.scrollY;
 
         const scrollContainerRect = containerRef.current.getBoundingClientRect();
-        const scrollContainerWidth = containerRef.current.scrollWidth;
-        const scrollContainerMarginLeft = scrollContainerRect.left;
-        const scrollContainerMarginTop = windowScrollY + scrollContainerRect.top;
 
         const visibleRect = new Rect(
-            scrollContainerMarginLeft,
-            windowScrollY + scrollContainerMarginTop,
-            scrollContainerWidth,
-            windowHeight - scrollContainerMarginTop
+            scrollContainerRect.left, 
+            scrollContainerRect.top >= 0 ? 0 : -scrollContainerRect.top,
+            containerRef.current.scrollWidth,
+            windowHeight - scrollContainerRect.top > windowHeight ? windowHeight : windowHeight - scrollContainerRect.top
         );
 
         const {
             visibleCellIndices,
             paddingTop,
             paddingBottom
-        } = calcLayout(
+        } = calcProjection(
             visibleRect,
             props.items.length,
             itemRectCache.current,
-            scrollContainerMarginTop,
             props.itemVerticalSpacing
         );
 
@@ -187,7 +183,7 @@ export default function VirtualScroller(props) {
             visibleCellIndices, 
             paddingTop, 
             paddingBottom,
-            windowScrollY // 스크롤 복구에 쓰임
+            windowScrollY // used to restore scroll position.
         ));
     };
 
@@ -203,7 +199,7 @@ export default function VirtualScroller(props) {
                     const curItemRect = getComponentRect(ref);
 
                     if (prevItemRect === null || (prevItemRect.height !== curItemRect.height)) {
-                        // 1. 캐시에 있는 아이템의 높이와 현재 아이템의 높이가 불일치하면,
+                        // 1. if cache does not reflect the real height of i th item,
                         foundItemHeightInconsistency.current = true;
                     }
 
@@ -214,8 +210,8 @@ export default function VirtualScroller(props) {
                         && foundItemHeightInconsistency.current === true;
 
                     if (shouldRecalcProjection === true) {
-                        // 2. 프로젝션 재계산 -> 렌더링.
-                        calcProjection();
+                        // 2. calc projection -> rendering
+                        recalcAndSetProjection();
                         foundItemHeightInconsistency.current = false;
                     }
                 }}
@@ -240,6 +236,7 @@ export default function VirtualScroller(props) {
             style={{
                 paddingTop: containerPaddingTop,
                 paddingBottom: containerPaddingBottom,
+                // border: '1px solid #f00'
             }}
         >
             {projection !== null && items.length > 0 &&
