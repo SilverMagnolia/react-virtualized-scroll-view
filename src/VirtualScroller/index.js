@@ -87,14 +87,6 @@ const useStyles = makeStyles({
     })
 });
 
-const Virtualizable = forwardRef((props, ref) => {
-    return (
-        <div ref={ref}>
-            {props.children}
-        </div>
-    );
-});
-
 export default function VirtualScroller(props) {
     const classes = useStyles(props);
     const {items, itemComponent} = props;
@@ -209,8 +201,9 @@ export default function VirtualScroller(props) {
 
     function renderItem(itemDescriptor, i) {
         return (
-            <Virtualizable
+            <ItemComponent
                 ref={(ref) => {
+                    console.log('>>>', ref);
                     if (ref === null) {
                         return;
                     }
@@ -236,45 +229,9 @@ export default function VirtualScroller(props) {
                     }
                 }}
                 key={i}
-            >
-            <ItemComponent
                 descriptor={itemDescriptor}
             />
-            </Virtualizable>
         );
-
-        // return (
-        //     <ItemComponent
-        //         ref={(ref) => {
-        //             console.log('>>>', ref);
-        //             if (ref === null) {
-        //                 return;
-        //             }
-
-        //             const prevItemRect = itemRectCache.current[i] || null;
-        //             const curItemRect = getComponentRect(ref);
-
-        //             if (prevItemRect === null || (prevItemRect.height !== curItemRect.height)) {
-        //                 // 1. if cache does not reflect the real height of i th item,
-        //                 foundItemHeightInconsistency.current = true;
-        //             }
-
-        //             itemRectCache.current[i] = curItemRect;
-
-        //             const shouldRecalcProjection =
-        //                 i === projection.visibleItemIndices[projection.visibleItemIndices.length - 1]
-        //                 && foundItemHeightInconsistency.current === true;
-
-        //             if (shouldRecalcProjection === true) {
-        //                 // 2. calc projection -> rendering
-        //                 recalcAndSetProjection();
-        //                 foundItemHeightInconsistency.current = false;
-        //             }
-        //         }}
-        //         key={i}
-        //         descriptor={itemDescriptor}
-        //     />
-        // );
     }
 
     const containerPaddingTop = projection === null || items.length === 0 ? 0 : projection.paddingTop;

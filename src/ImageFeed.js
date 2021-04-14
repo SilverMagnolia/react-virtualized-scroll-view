@@ -19,9 +19,6 @@ const useStyles = makeStyles({
     container: {
         paddingTop: 32,
         paddingBottom: 32,
-        // '& > *': {
-        //     marginBottom: 16
-        // }
     },
     img: {
         width: '100%',
@@ -45,12 +42,17 @@ export default function (props) {
 
     async function requestList() {
         try {
-            const resultList = await UnsplashAPIService.getImageList(state.page);
+            const resultList = (await UnsplashAPIService.getImageList(state.page)).map(e => new ImageInfo(e));
+            const resultList1 = (await UnsplashAPIService.getImageList(2)).map(e => new ImageInfo(e));
+            const resultList2 = (await UnsplashAPIService.getImageList(3)).map(e => new ImageInfo(e));
+            const resultList3 = (await UnsplashAPIService.getImageList(4)).map(e => new ImageInfo(e));
+            const resultList4 = (await UnsplashAPIService.getImageList(5)).map(e => new ImageInfo(e));
+            
             console.log('received > ', resultList[0]);
 
             setState({
                 page: state.page + 1,
-                list: state.list.concat(resultList.map(e => new ImageInfo(e)))
+                list: state.list.concat(resultList.concat(resultList1).concat(resultList2).concat(resultList3).concat(resultList4))
             })
 
         } catch (err) {
@@ -70,13 +72,24 @@ export default function (props) {
     );
 }
 
-const ImageItem = (props) => {
+const ImageItem = forwardRef((props, ref) => {
     const classes = useStyles();
     const {descriptor} = props;
     
     return (
-        <Card raised={true}>
+        <Card raised={true} ref={ref}>
             <img src={descriptor.url} className={classes.img} />
         </Card>
     );
-};
+});
+
+// const ImageItem = (props) => {
+//     const classes = useStyles();
+//     const {descriptor} = props;
+    
+//     return (
+//         <Card raised={true}>
+//             <img src={descriptor.url} className={classes.img} />
+//         </Card>
+//     );
+// };
