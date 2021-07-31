@@ -1,10 +1,10 @@
-import React, {useEffect, useState, useRef, forwardRef} from 'react';
+/* eslint-disable react-hooks/exhaustive-deps */
+import React, {useEffect, useState, forwardRef} from 'react';
 import {
     Container,
     Card,
     makeStyles
 } from '@material-ui/core';
-import { withStyles } from '@material-ui/core/styles';
 import UnsplashAPIService from './UnsplashAPIService';
 import VirtualizedScroller from './VirtualScroller';
 
@@ -29,7 +29,7 @@ const useStyles = makeStyles({
     },
 });
 
-export default function (props) {
+export default function ImageFeed() {
     const classes = useStyles();
     const [state, setState] = useState({
         page: 1,
@@ -47,8 +47,6 @@ export default function (props) {
             const resultList2 = (await UnsplashAPIService.getImageList(3)).map(e => new ImageInfo(e));
             const resultList3 = (await UnsplashAPIService.getImageList(4)).map(e => new ImageInfo(e));
             const resultList4 = (await UnsplashAPIService.getImageList(5)).map(e => new ImageInfo(e));
-            
-            console.log('received > ', resultList[0]);
 
             setState({
                 page: state.page + 1,
@@ -78,18 +76,7 @@ const ImageItem = forwardRef((props, ref) => {
     
     return (
         <Card raised={true} ref={ref}>
-            <img src={descriptor.url} className={classes.img} />
+            <img src={descriptor.url} className={classes.img} alt='' />
         </Card>
     );
 });
-
-// const ImageItem = (props) => {
-//     const classes = useStyles();
-//     const {descriptor} = props;
-    
-//     return (
-//         <Card raised={true}>
-//             <img src={descriptor.url} className={classes.img} />
-//         </Card>
-//     );
-// };

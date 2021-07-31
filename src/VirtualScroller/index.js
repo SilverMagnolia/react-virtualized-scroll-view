@@ -203,7 +203,6 @@ export default function VirtualScroller(props) {
         return (
             <ItemComponent
                 ref={(ref) => {
-                    console.log('>>>', ref);
                     if (ref === null) {
                         return;
                     }
