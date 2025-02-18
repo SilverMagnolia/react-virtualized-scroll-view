@@ -1,6 +1,6 @@
 ## React Virtual Scroll
 
-- This module is an implementation of [Twitter VirtualScroller]([https://itsze.ro/blog/2017/04/09/infinite-list-and-react.html](https://medium.com/@paularmstrong/twitter-lite-and-high-performance-react-progressive-web-apps-at-scale-d28a00e780a3) "Twitter VirtualScroller").
+- This module is an implementation of [Twitter VirtualScroller](https://medium.com/@paularmstrong/twitter-lite-and-high-performance-react-progressive-web-apps-at-scale-d28a00e780a3 "Twitter VirtualScroller").
 
 - When developing native iOS or Android apps, Apple and Google provide **UICollectionView** and **RecyclerView** for handling infinite lists. These classes render only the visible items by considering factors such as the container size, the total content size, and the scroll position. However, React does not have a built-in solution for this.
 
